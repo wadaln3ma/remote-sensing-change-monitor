@@ -16,6 +16,9 @@ if ROOT not in sys.path:
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+# IMPORTANT: importing rioxarray registers the ".rio" accessor on xarray objects
+import rioxarray  # noqa: F401
+
 from app.utils.stac_utils import load_aoi, search_items, stack_sentinel, ds_for_time_index
 from app.utils.processing import compute_indices
 from app.utils.viz import save_index_png
@@ -53,6 +56,7 @@ def main() -> None:
     assert len(items) > 0, "No STAC items returned in CI search"
 
     da = stack_sentinel(items[:1], resolution=10, chunksize="auto")
+    # .rio works because we imported rioxarray above
     da = da.rio.write_crs(da.rio.crs or da.rio.estimate_utm_crs())
     da = da.rio.clip(gdf.to_crs(da.rio.crs).geometry, gdf.to_crs(da.rio.crs).crs, drop=True)
 
