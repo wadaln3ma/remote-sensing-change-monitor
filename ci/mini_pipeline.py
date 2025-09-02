@@ -1,42 +1,70 @@
+# ci/mini_pipeline.py
+# Minimal smoke test: search STAC, stack one Sentinel-2 item, compute NDVI, export GeoTIFF+PNG.
+# Prints a small JSON payload on success.
 
-(Keep your existing screenshots section; update with your deployed URL.)
+import os
+import json
+import tempfile
+import warnings
+from datetime import datetime, timedelta
 
----
+warnings.filterwarnings("ignore", category=UserWarning)
 
-# 6) Portfolio blurb (copy/paste)
+from app.utils.stac_utils import load_aoi, search_items, stack_sentinel, ds_for_time_index
+from app.utils.processing import compute_indices
+from app.utils.viz import save_index_png
 
-**Sentinel-2 Construction/Change Monitor — Remote Sensing + GIS**
 
-I built a portfolio-ready, public web app that lets anyone draw or upload an Area of Interest, fetch **Sentinel-2 L2A** imagery from a STAC catalog, **cloud-mask** it, compute classic indices (**NDVI, NDWI, NDBI**), and run simple **change detection** between two dates. The app previews a **before/after swipe** and a **ΔNDVI heatmap**, and exports **clipped GeoTIFFs + quick-look PNGs** as a one-click ZIP.
+# Tiny AOI around Dubai (polygon bbox)
+AOI = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [55.17, 25.13],
+                        [55.39, 25.13],
+                        [55.39, 25.33],
+                        [55.17, 25.33],
+                        [55.17, 25.13],
+                    ]
+                ],
+            },
+        }
+    ],
+}
 
-- **Tech**: Python 3.11, Streamlit, STAC (**pystac-client**, **stackstac**), **xarray/rioxarray**, geopandas, rasterio, folium, matplotlib  
-- **Features**: AOI draw/upload, date & cloud filters, index computation, change map, batch export  
-- **Infra**: Streamlit Cloud deploy, pinned wheels; GitHub Actions **mini pipeline** sanity-checks STAC access & NDVI compute on every push  
-- **Outcome**: <one sentence about a real AOI you tested—e.g., detected new construction/land-use changes between Month X and Y>
 
-> Live demo: _<your Streamlit link>_ • Source: _<GitHub repo link>_
+def main() -> None:
+    gdf = load_aoi(aoi_geojson=AOI)
 
-(Attach 2–3 screenshots: AOI map, swipe panel, ΔNDVI panel.)
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=180)
 
----
+    items = search_items(gdf, start.isoformat(), end.isoformat(), max_cloud=30, limit=3)
+    assert len(items) > 0, "No STAC items returned in CI search"
 
-# 7) (Optional) One-click Docker deploy (Render/Railway)
+    da = stack_sentinel(items[:1], resolution=10, chunksize="auto")
+    da = da.rio.write_crs(da.rio.crs or da.rio.estimate_utm_crs())
+    da = da.rio.clip(gdf.to_crs(da.rio.crs).geometry, gdf.to_crs(da.rio.crs).crs, drop=True)
 
-If you prefer container hosting:
+    ds = ds_for_time_index(da, 0)
+    idx = compute_indices(ds)
+    ndvi = idx["NDVI"]
 
-### `Dockerfile`
-```dockerfile
-FROM python:3.11-slim
+    outdir = tempfile.mkdtemp(prefix="mini_pipeline_")
+    tif_path = os.path.join(outdir, "ndvi.tif")
+    png_path = os.path.join(outdir, "ndvi.png")
 
-# System deps for rasterio/pyproj wheels (light)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gdal-bin libgdal32 proj-bin && rm -rf /var/lib/apt/lists/* || true
+    ndvi.rio.to_raster(tif_path, compress="deflate")
+    save_index_png(ndvi, png_path)
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+    print(json.dumps({"ok": True, "outdir": outdir, "files": [tif_path, png_path]}))
 
-COPY . .
-ENV PYTHONPATH=/app
-EXPOSE 8501
-CMD ["streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+
+if __name__ == "__main__":
+    main()
