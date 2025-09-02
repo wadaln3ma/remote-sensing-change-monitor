@@ -1,0 +1,15 @@
+[project]
+name = "remote-sensing-change-monitor"
+version = "0.1.0"
+description = "Streamlit app for Sentinel-2 construction/change monitoring (NDVI/NDWI/NDBI) with cloud masking and batch export."
+authors = [{ name = "Your Name", email = "you@example.com" }]
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["remote-sensing", "sentinel-2", "change-detection", "ndvi", "ndwi", "ndbi", "streamlit", "stac"]
+license = { text = "MIT" }
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
