@@ -61,7 +61,8 @@ def search_items(
         query={"eo:cloud_cover": {"lt": max_cloud}},
         limit=limit,
     )
-    return list(search.get_items())
+    # Use items() to avoid deprecation warnings
+    return list(search.items())
 
 
 def _common_assets(items: List, requested: List[str]) -> List[str]:
