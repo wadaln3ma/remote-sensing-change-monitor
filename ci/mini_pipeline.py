@@ -1,19 +1,24 @@
 # ci/mini_pipeline.py
 # Minimal smoke test: search STAC, stack one Sentinel-2 item, compute NDVI, export GeoTIFF+PNG.
-# Prints a small JSON payload on success.
 
 import os
+import sys
 import json
 import tempfile
 import warnings
 from datetime import datetime, timedelta
+
+# --- ensure repo root is importable (so "app.utils..." works) ---
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+# ----------------------------------------------------------------
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 from app.utils.stac_utils import load_aoi, search_items, stack_sentinel, ds_for_time_index
 from app.utils.processing import compute_indices
 from app.utils.viz import save_index_png
-
 
 # Tiny AOI around Dubai (polygon bbox)
 AOI = {
@@ -37,7 +42,6 @@ AOI = {
         }
     ],
 }
-
 
 def main() -> None:
     gdf = load_aoi(aoi_geojson=AOI)
@@ -64,7 +68,6 @@ def main() -> None:
     save_index_png(ndvi, png_path)
 
     print(json.dumps({"ok": True, "outdir": outdir, "files": [tif_path, png_path]}))
-
 
 if __name__ == "__main__":
     main()
